@@ -14,7 +14,173 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      agents: {
+        Row: {
+          created_at: string
+          "full name": string | null
+          id: string
+          org_id: string | null
+          role: string
+        }
+        Insert: {
+          created_at?: string
+          "full name"?: string | null
+          id?: string
+          org_id?: string | null
+          role?: string
+        }
+        Update: {
+          created_at?: string
+          "full name"?: string | null
+          id?: string
+          org_id?: string | null
+          role?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "Agents_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      kb_articles: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          org_id: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          org_id?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          org_id?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kb_articles_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      messages: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          sender: string
+          ticket_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          sender: string
+          ticket_id?: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          sender?: string
+          ticket_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "Messages_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      organizations: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          slug: string
+          widget_config: Json | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name?: string
+          slug?: string
+          widget_config?: Json | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          slug?: string
+          widget_config?: Json | null
+        }
+        Relationships: []
+      }
+      tickets: {
+        Row: {
+          created_at: string
+          customer_session_id: string
+          id: string
+          metadata: Json
+          org_id: string | null
+          preview: string | null
+          status: string
+          subject: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          customer_session_id: string
+          id?: string
+          metadata?: Json
+          org_id?: string | null
+          preview?: string | null
+          status?: string
+          subject?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          customer_session_id?: string
+          id?: string
+          metadata?: Json
+          org_id?: string | null
+          preview?: string | null
+          status?: string
+          subject?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "Ticktes_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
