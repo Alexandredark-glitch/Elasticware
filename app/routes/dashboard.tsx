@@ -1,5 +1,17 @@
 import type { Route } from "./+types/dashboard";
+import { supabaseApi } from "~/lib/supabase/api";
 import { DashboardShell } from "../features/dashboard/DashboardShell";
+import { useLoaderData } from "react-router";
+
+export async function loader() {
+  const { data: org } = await supabaseApi
+    .from("organizations")
+    .select("id")
+    .eq("slug", "demo")
+    .single();
+
+  return { orgId: org?.id ?? null };
+}
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -19,7 +31,7 @@ export function meta({}: Route.MetaArgs) {
   ];
 }
 
-
 export default function DashboardRoute() {
-  return <DashboardShell />;
+  const { orgId } = useLoaderData<typeof loader>();
+  return <DashboardShell orgId={orgId} />;
 }

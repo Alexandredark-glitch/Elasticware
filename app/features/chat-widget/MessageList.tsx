@@ -11,7 +11,7 @@ export function MessageList({ messages } : MessageListProp) {
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [messages]); //UX
 
   return (
     <div className="scroll-chat flex-1 overflow-y-auto px-4 py-4 space-y-3">

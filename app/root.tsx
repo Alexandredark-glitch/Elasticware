@@ -5,7 +5,11 @@ import {
   Outlet,
   Scripts,
   ScrollRestoration,
+  useNavigation
 } from "react-router";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
+
 
 import type { Route } from "./+types/root";
 import "./app.css";
@@ -47,8 +51,27 @@ export function Layout({ children }: { children: React.ReactNode }) {
   );
 }
 
+const queryClient = new QueryClient();
+
+
 export default function App() {
-  return <Outlet />;
+   const navigation = useNavigation();
+   const isNavigating = navigation.state === "loading" || navigation.state === "submitting";
+   
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      {isNavigating && (
+        <div className="fixed top-0 left-0 right-0 h-1 bg-linear-to-r from-indigo-500 via-purple-500 to-pink-500 animate-pulse z-50 shadow-[0_0_12px_rgba(99,102,241,0.6)]" />
+      )}
+
+     <div className={isNavigating ? "opacity-75 transition-opacity duration-200 ease-in-out" : "transition-opacity duration-200"}>
+        <Outlet />
+      </div>
+      <ReactQueryDevtools initialIsOpen={false} />
+      
+    </QueryClientProvider>
+  );
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {

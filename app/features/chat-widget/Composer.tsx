@@ -1,18 +1,23 @@
 import { useState, type FormEvent } from "react";
 
+interface COmposerProps {
+  onSend: (text:string) => void,
+  
+  isSending?: boolean
+}
+
 export function Composer({
   onSend,
-  disabled,
-}: {
-  onSend: (text: string) => void;
-  disabled?: boolean;
-}) {
+  isSending
+}:COmposerProps) {
+
+
   const [value, setValue] = useState("");
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
     const trimmed = value.trim();
-    if (!trimmed || disabled) return;
+    if (!trimmed || isSending) return;
     onSend(trimmed);
     setValue("");
   }
@@ -26,13 +31,13 @@ export function Composer({
         type="text"
         value={value}
         onChange={(e) => setValue(e.target.value)}
-        placeholder={disabled ? "Composer disabled" : "Type a message..."}
-        disabled={disabled}
+        placeholder="Type a message..."
+        disabled={isSending}
         className="flex-1 bg-charcoal-900 text-cream-100 text-sm px-4 py-2.5 rounded-lg border border-charcoal-600 placeholder:text-charcoal-400 focus:outline-none focus:border-teal-500/50 transition-colors"
       />
       <button
         type="submit"
-        disabled={disabled || !value.trim()}
+        disabled={isSending || !value.trim()}
         className="flex-shrink-0 w-10 h-10 flex items-center justify-center bg-accent-500 text-white rounded-lg hover:bg-accent-600 disabled:bg-charcoal-700 disabled:text-charcoal-500 disabled:cursor-not-allowed transition-colors focus-ring"
         aria-label="Send message"
       >
