@@ -1,10 +1,9 @@
 import type { Route } from "./+types/api.messages";
 import { supabaseApi } from "~/lib/supabase/api";
 import { CreateMessageSchema } from "~/lib/db/schema";
+import { requireAuth } from "~/lib/supabase/auth.server";
 
 export async function action({ request }: Route.ActionArgs) {
- // The response.json allow us to return status codes. 
-
   if (request.method !== "POST") {
     return Response.json({ error: "Method not allowed" }, { status: 405 });
   }
@@ -25,37 +24,40 @@ export async function action({ request }: Route.ActionArgs) {
     );
   }
 
-  const { ticket_id, sender, content } = parsed.data;
+  const { ticket_id, sender: clientSender, content } = parsed.data;
 
-  const { data: ticket, error: ticketError } = await supabaseApi //Just in case the ticket doesn't exist
+  // Determine which Supabase client to use
+  let sender = clientSender;
+  let supabase = supabaseApi; // public client for customers
+
+  if (clientSender === "agent") {
+    const auth = await requireAuth(request); // throws if not logged in
+    sender = "agent";
+    supabase = auth.supabase; // authenticated client for RLS
+  }
+
+  const { data: ticket, error: ticketError } = await supabase
     .from("tickets")
     .select("id, status")
     .eq("id", ticket_id)
     .single();
 
-  console.log("ticket in api messages", ticket);  
-
   if (ticketError || !ticket) {
     return Response.json({ error: "Ticket not found" }, { status: 404 });
   }
 
-  const { error: msgError } = await supabaseApi.from("messages").insert({
+  const { error: msgError } = await supabase.from("messages").insert({
     ticket_id,
     sender,
     content,
-  }); // important
+  });
 
   if (msgError) {
-    return Response.json(
-      { error: "Failed to save message" },
-      { status: 500 }
-    );
+    return Response.json({ error: "Failed to save message" }, { status: 500 });
   }
 
-
-  //This only runs if the sender is the agent (When I reply to a customer message)
   if (sender === "agent") {
-    const { error: updateError } = await supabaseApi
+    const { error: updateError } = await supabase
       .from("tickets")
       .update({
         status: "open",

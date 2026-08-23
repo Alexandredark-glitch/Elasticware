@@ -1,5 +1,11 @@
 import type { Route } from "./+types/sandbox";
 import { SplitView } from "~/features/sandbox/SplitView";
+import { requireAuth } from "~/lib/supabase/auth.server";
+
+export async function loader({ request }: Route.LoaderArgs) {
+  await requireAuth(request);
+  return null;
+}
 
 export function meta ({}:Route.MetaArgs) {
   return [

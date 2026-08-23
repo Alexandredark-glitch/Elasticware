@@ -6,5 +6,9 @@ export default [
     route("mock-shop", "routes/mock-shop.tsx"),
     route("dashboard", "routes/dashboard.tsx"),
     route("api/tickets", "routes/api.tickets.tsx"),    
-    route("api/messages", "routes/api.messages.tsx"),  
+    route("api/messages", "routes/api.messages.tsx"),
+    route("login", "routes/login.tsx"),
+    route("signup", "routes/signup.tsx"),
+    route("soon", "routes/soon.tsx"),
+    route("logout", "routes/logout.ts"),  
 ] satisfies RouteConfig;

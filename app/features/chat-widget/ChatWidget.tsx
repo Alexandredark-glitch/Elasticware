@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useTicketMessages } from "~/hooks/useTicketMessages";
 import { useFetcher } from "react-router";
 import { MessageList } from "./MessageList";
@@ -13,89 +13,79 @@ export function ChatWidget() {
   const resolveFetcher = useFetcher();
 
   const [isOpen, setIsOpen] = useState(false);
-  const [messages, setMessages] = useState<ChatMessage[]>([BOT_GREETING]);
-  console.log("This is the arr of messages", messages);
+  
+  
   const { sessionId, ticketId, saveTicketId, clearSession } = useWidgetSession();
 
   const { data: history = [], isLoading: isLoadingHistory } =
     useTicketMessages(ticketId); //null on first render (ticketID) so is not enabled
-    console.log("This is the history", history);
+   
+    
 
   const [sendError, setSendError] = useState<string | null>(null);
   const [pendingText, setPendingText] = useState<string | null>(null);
-  const pendingTextRef = useRef<string | null>(null);
+  
+    // Compute UI messages directly from React Query data
+  const dbMessages: ChatMessage[] = history.map((m) => ({
+    id: m.id,
+    sender: m.sender as "customer" | "bot" | "agent",
+    text: m.content,
+    timestamp: new Date(m.created_at).getTime(),
+  }));
+
+  const hasArrived =
+    pendingText &&
+    dbMessages.some((m) => m.text === pendingText && m.sender === "customer");
+
+  const optimisticMessage: ChatMessage | null =
+    !hasArrived && pendingText
+      ? { id: "pending", sender: "customer", text: pendingText, timestamp: Date.now() }
+      : null;
+
+  const messages: ChatMessage[] = [
+    BOT_GREETING,
+    ...dbMessages,
+    ...(optimisticMessage ? [optimisticMessage] : []),
+  ];
 
   const isSending = messageFetcher.state !== "idle";
+  const isEnding = resolveFetcher.state !== "idle";
 
   // Skeleton ONLY when restoring an old conversation from localStorage
   const isHydrating =
     Boolean(ticketId) && isLoadingHistory && messages.length === 1 && !pendingText;
 
-     // Keep ref in sync with state (doesn't trigger effects)
-  useEffect(() => {
-    pendingTextRef.current = pendingText;
-  }, [pendingText]);
-
-  // -------------------------------------------------------------------------
-  // Sync DB history into local state.
-  // Runs on initial load AND whenever Supabase realtime pushes a new message.
-  // -------------------------------------------------------------------------
-  useEffect(() => {
-    if (!ticketId || isLoadingHistory) return;
-
-    const dbMessages = history.map((m) => ({
-      id: m.id,
-      sender: m.sender as "customer" | "bot" | "agent",
-      text: m.content,
-      timestamp: new Date(m.created_at).getTime(),
-    }));
-
-    // If our optimistic message has arrived in the database, clear it
-    const hasArrived =
-      pendingTextRef.current &&
-      dbMessages.some(
-        (m) => m.text === pendingTextRef.current && m.sender === "customer"
-      );
-
-    if (hasArrived) {
-      setPendingText(null);
-    }
-
-    // Only show optimistic bubble if the real message hasn't landed yet
-    const optimistic: ChatMessage[] =
-      !hasArrived && pendingTextRef.current
-        ? [
-            {
-              id: "pending",
-              sender: "customer",
-              text: pendingTextRef.current,
-              timestamp: Date.now(),
-            },
-          ]
-        : [];
-
-    setMessages([BOT_GREETING, ...dbMessages, ...optimistic]);
-    console.log("This is the messages in the second useEffect", messages);
-  }, [ticketId, isLoadingHistory, history]);
+     useEffect(() => {
+  if (hasArrived) setPendingText(null);
+}, [hasArrived]);
 
   
-  // Handle message fetcher response (create ticket or insert message)
-  useEffect(() => {
-    if (messageFetcher.state !== "idle" || !messageFetcher.data) return;
+ useEffect(() => {
+  if (messageFetcher.state !== "idle" || !messageFetcher.data) return;
 
-    if (messageFetcher.data.error) {
-      setSendError(
-        typeof messageFetcher.data.error === "string"
-          ? messageFetcher.data.error
-          : "Failed to send"
-      );
-    } else {
-      setSendError(null);
-      if (messageFetcher.data.ticket_id && !ticketId) {
-        saveTicketId(messageFetcher.data.ticket_id); // It is only after this that the ticketId is available
-      }
+  if (messageFetcher.data.error) {
+    setSendError(
+      typeof messageFetcher.data.error === "string"
+        ? messageFetcher.data.error
+        : "Failed to send"
+    );
+  } else {
+    setSendError(null);
+    if (messageFetcher.data.ticket_id) {
+      saveTicketId(messageFetcher.data.ticket_id);
     }
-  }, [messageFetcher.state, messageFetcher.data, ticketId, saveTicketId]);
+  }
+}, [messageFetcher.state, messageFetcher.data, saveTicketId]);
+
+    useEffect(() => {
+  if (resolveFetcher.state !== "idle" || !resolveFetcher.data) return;
+
+  if (resolveFetcher.data.ok) {
+    clearSession();
+    setPendingText(null);
+    setSendError(null);
+  }
+}, [resolveFetcher.state, resolveFetcher.data, clearSession]);
 
     useEffect(() => {
     if (!ticketId) return;
@@ -111,10 +101,11 @@ export function ChatWidget() {
           filter: `id=eq.${ticketId}`,
         },
         (payload) => {
-          if (payload.new.status === "resolved") {
-            clearSession();
-            setMessages([BOT_GREETING]);
-          }
+         if (payload.new.status === "resolved") {
+  clearSession();
+  setPendingText(null);
+  setSendError(null);
+}
         }
       )
       .subscribe();
@@ -147,19 +138,12 @@ export function ChatWidget() {
     }
   };
 
-  const handleEndChat = () => {
-    if (ticketId) {
-       clearSession();
-    setMessages([BOT_GREETING]);
-    setPendingText(null);
-    pendingTextRef.current = null; // .current is mutable thanks to react
-    setSendError(null);
-      resolveFetcher.submit(
-        { intent: "resolve", ticket_id: ticketId },
-        { method: "post", action: "/api/tickets" }
-      );
-    }
-   
+    const handleEndChat = () => {
+    if (!ticketId || isEnding) return;
+    resolveFetcher.submit(
+      { intent: "resolve", ticket_id: ticketId },
+      { method: "post", action: "/api/tickets" }
+    );
   };
 
   return (
@@ -215,12 +199,17 @@ export function ChatWidget() {
             </div>
 
             <div className="flex items-center gap-2">
-              {ticketId && (
+                            {ticketId && (
                 <button
                   onClick={handleEndChat}
-                  className="text-xs text-charcoal-400 hover:text-accent-400 px-2 py-1 rounded hover:bg-charcoal-800 transition-colors"
+                  disabled={isEnding}
+                  className={`text-xs px-2 py-1 rounded transition-colors ${
+                    isEnding
+                      ? "text-charcoal-500 cursor-wait"
+                      : "text-charcoal-400 hover:text-accent-400 hover:bg-charcoal-800"
+                  }`}
                 >
-                  End chat
+                  {isEnding ? "Ending…" : "End chat"}
                 </button>
               )}
               <button

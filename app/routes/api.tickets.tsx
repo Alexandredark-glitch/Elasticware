@@ -1,6 +1,7 @@
 import type { Route } from "./+types/api.tickets";
 import { supabaseApi } from "~/lib/supabase/api";
 import { CreateTicketSchema } from "~/lib/db/schema";
+import { requireAuth } from "~/lib/supabase/auth.server";
 
 export async function action({ request }: Route.ActionArgs) {
   /*
@@ -10,39 +11,45 @@ export async function action({ request }: Route.ActionArgs) {
      
   */
   const form = await request.formData();
-  console.log("CLIENT REQUEST", form);
+ 
   const intent = form.get("intent");
 
   if (intent === "resolve") {
-    const ticket_id = form.get("ticket_id");
-    if (!ticket_id || typeof ticket_id !== "string") {
-      return Response.json({ error: "Missing ticket_id" }, { status: 400 });
-    } // Just in case. I think this should never happen but just in case.
-    const { error } = await supabaseApi
-      .from("tickets")
-      .update({ status: "resolved", updated_at: new Date().toISOString() }) // This is for the channel in chat widget
-      .eq("id", ticket_id);
-    if (error) {
-      return Response.json({ error: "Failed to resolve ticket" }, { status: 500 });
-    }
-    console.log("Resolved ticket is true" );
-    return Response.json({ ok: true, resolved: true });
+  const { supabase } = await requireAuth(request);
+  
+  const ticket_id = form.get("ticket_id");
+  if (!ticket_id || typeof ticket_id !== "string") {
+    return Response.json({ error: "Missing ticket_id" }, { status: 400 });
   }
+
+  const { error } = await supabase
+    .from("tickets")
+    .update({ status: "resolved", updated_at: new Date().toISOString() })
+    .eq("id", ticket_id);
+
+  if (error) {
+    return Response.json({ error: "Failed to resolve ticket" }, { status: 500 });
+  }
+  return Response.json({ ok: true, resolved: true });
+}
 
   // ── DELETE ──
   if (intent === "delete") {
-    const ticket_id = form.get("ticket_id");
-    if (!ticket_id || typeof ticket_id !== "string") {
-      return Response.json({ error: "Missing ticket_id" }, { status: 400 });
-    }
-    const { error: msgErr } = await supabaseApi
-      .from("messages")
-      .delete()
-      .eq("ticket_id", ticket_id);
+    const { supabase } = await requireAuth(request);
+  
+  const ticket_id = form.get("ticket_id");
+  if (!ticket_id || typeof ticket_id !== "string") {
+    return Response.json({ error: "Missing ticket_id" }, { status: 400 });
+  }
+
+  const { error: msgErr } = await supabase
+    .from("messages")
+    .delete()
+    .eq("ticket_id", ticket_id);
     if (msgErr) {
       return Response.json({ error: "Failed to delete messages" }, { status: 500 });
     }
-    const { error: ticketErr } = await supabaseApi
+    const { error: ticketErr } = await supabase
       .from("tickets")
       .delete()
       .eq("id", ticket_id);
