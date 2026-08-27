@@ -8,8 +8,13 @@ if (!SERVICE_ROLE_KEY) {
   );
 }
 
+const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
+if (!SUPABASE_URL) {
+  throw new Error("VITE_SUPABASE_URL is required");
+}
+
 export const supabaseService = createClient<Database>(
-  import.meta.env.VITE_SUPABASE_URL,
+  SUPABASE_URL,
   SERVICE_ROLE_KEY,
   {
     auth: {
