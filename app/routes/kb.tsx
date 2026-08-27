@@ -101,7 +101,7 @@ function EmbedCodeCard({ orgSlug }: { orgSlug: string }) {
   const origin =
     typeof window !== "undefined"
       ? window.location.origin
-      : "https://yourdomain.com";
+      : (import.meta.env.VITE_APP_URL ?? "http://localhost:5173");
 
   const embedCode = `<script src="${origin}/widget.js" data-org-key="${orgSlug}"></script>`;
 

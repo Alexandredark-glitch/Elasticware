@@ -6,6 +6,9 @@ import { requireAuth } from "~/lib/supabase/auth.server";
 import { handleBotReply } from "~/lib/bot/engine.server";
 import { corsResponse, corsPreflight } from "~/lib/cors";
 
+
+import { Sentry } from "~/lib/sentry.server";
+
 export async function action({ request }: Route.ActionArgs) {
   if (request.method === "OPTIONS") return corsPreflight();
   if (request.method !== "POST") {
@@ -74,6 +77,7 @@ export async function action({ request }: Route.ActionArgs) {
         customerMessage: content,
       });
     } catch (err) {
+      Sentry.captureException(err);
       console.error("Bot reply failed:", err);
     }
   }

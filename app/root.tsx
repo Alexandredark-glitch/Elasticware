@@ -1,3 +1,4 @@
+import "~/lib/sentry.client";
 import {
   isRouteErrorResponse,
   Links,
@@ -7,18 +8,16 @@ import {
   ScrollRestoration,
   useNavigation,
 } from "react-router";
+import * as Sentry from "@sentry/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ErrorProvider } from "~/hooks/useGlobalError";
 import { ErrorToast } from "~/features/error/ErrorToast";
 
 import type { Route } from "./+types/root";
 import "./app.css";
 
-// ── QueryClient factory ──────────────────────────────────────────────
-// Server: fresh client per request (prevents cross-request cache leaks)
-// Browser: singleton across HMR and re-renders
 function makeQueryClient() {
   return new QueryClient({
     defaultOptions: {
@@ -41,7 +40,6 @@ function getQueryClient() {
   return w.__QUERY_CLIENT__;
 }
 
-// ── Links & Layout ───────────────────────────────────────────────────
 export const links: Route.LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
   {
@@ -53,11 +51,7 @@ export const links: Route.LinksFunction = () => [
     rel: "stylesheet",
     href: "https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap",
   },
-  {
-    rel: "icon",
-    type: "image/svg+xml",
-    href: "favicon.svg",
-  },
+  { rel: "icon", type: "image/svg+xml", href: "favicon.svg" },
 ];
 
 export function Layout({ children }: { children: React.ReactNode }) {
@@ -78,7 +72,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
   );
 }
 
-// ── App ──────────────────────────────────────────────────────────────
 export default function App() {
   const [queryClient] = useState(() => getQueryClient());
   const navigation = useNavigation();
@@ -101,7 +94,16 @@ export default function App() {
               : "transition-opacity duration-200"
           }
         >
-          <Outlet />
+          <Sentry.ErrorBoundary
+            fallback={({ error }) => (
+              <div className="p-8 text-red-600">
+                <h1 className="text-xl font-bold">Something went wrong</h1>
+                <pre className="mt-2 text-sm">{String(error)}</pre>
+              </div>
+            )}
+          >
+            <Outlet />
+          </Sentry.ErrorBoundary>
         </div>
 
         <ReactQueryDevtools initialIsOpen={false} />
@@ -110,7 +112,6 @@ export default function App() {
   );
 }
 
-// ── Error Boundary ───────────────────────────────────────────────────
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   let title = "Something went wrong";
   let message = "An unexpected error occurred. Please try again.";
@@ -124,6 +125,12 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   } else if (import.meta.env.DEV && error instanceof Error) {
     message = error.message;
   }
+
+  useEffect(() => {
+    if (error && !(isRouteErrorResponse(error) && error.status === 404)) {
+      Sentry.captureException(error);
+    }
+  }, [error]);
 
   return (
     <main className="min-h-screen flex flex-col items-center justify-center p-4 text-center bg-white">
