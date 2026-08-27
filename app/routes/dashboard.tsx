@@ -6,6 +6,7 @@ import { redirect } from "react-router";
 import { createSupabaseServerClient } from "~/lib/supabase/supabase.server";
 
 
+
 export async function action({ request }: Route.ActionArgs) {
   const formData = await request.formData();
   const intent = formData.get("intent") as string;

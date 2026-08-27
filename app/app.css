@@ -190,3 +190,6 @@
     outline-offset: 2px;
   }
 }
+button {
+  cursor: pointer;
+}

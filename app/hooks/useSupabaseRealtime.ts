@@ -1,15 +1,18 @@
 import { useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "~/lib/supabase/supabase.client";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "~/lib/db/database.types";
 
 interface UseSupabaseRealtimeOptions {
-  baseChannelName: string; // e.g. "tickets:org:demo-uuid"
-  table: string;
+  baseChannelName: string;
+  table: keyof Database["public"]["Tables"];
   event?: "INSERT" | "UPDATE" | "DELETE" | "*";
   filter?: string;
   queryKey: unknown[];
   enabled?: boolean;
   debug?: boolean;
+  client?: SupabaseClient<Database>;
 }
 
 export function useSupabaseRealtime({
@@ -20,40 +23,34 @@ export function useSupabaseRealtime({
   queryKey,
   enabled = true,
   debug = false,
+  client,
 }: UseSupabaseRealtimeOptions) {
   const queryClient = useQueryClient();
   const instanceRef = useRef(crypto.randomUUID().slice(0, 8));
-  const optionsRef = useRef({ table, event, filter, queryKey, debug });
-
-  // Keep latest options in a ref so the effect always sees current values
-  // without re-subscribing when they change.
-  useEffect(() => {
-    optionsRef.current = { table, event, filter, queryKey, debug };
-  });
-
   const channelName = `${baseChannelName}:inst:${instanceRef.current}`;
+  const queryKeyString = JSON.stringify(queryKey);
 
   useEffect(() => {
     if (!enabled) return;
 
-    const { table: t, event: e, filter: f, queryKey: key, debug: d } =
-      optionsRef.current;
-
     const log = (...args: unknown[]) => {
-      if (d) console.log(`[Realtime:${channelName}]`, ...args);
+      if (debug) console.log(`[Realtime:${channelName}]`, ...args);
     };
 
-    log("Subscribing...", { table: t, event: e, filter: f });
+    log("Subscribing...", { table, event, filter });
 
-    const config: any = { event: e, schema: "public", table: t };
-    if (f) config.filter = f;
+    const sb = client ?? supabase;
 
-    const channel = supabase
+    const channel = sb
       .channel(channelName)
-      .on("postgres_changes", config, (payload) => {
-        log("Change received:", payload);
-        queryClient.invalidateQueries({ queryKey: key });
-      })
+      .on(
+        "postgres_changes",
+        { event, schema: "public", table, ...(filter ? { filter } : {}) },
+        (payload) => {
+          log("Change received:", payload);
+          queryClient.invalidateQueries({ queryKey });
+        }
+      )
       .subscribe((status, err) => {
         log("Status:", status);
         if (status === "CHANNEL_ERROR" || err) {
@@ -63,7 +60,7 @@ export function useSupabaseRealtime({
 
     return () => {
       log("Cleaning up...");
-      supabase.removeChannel(channel);
+      sb.removeChannel(channel);
     };
-  }, [channelName, enabled, queryClient]);
+  }, [channelName, enabled, queryClient, client, table, event, filter, queryKeyString, debug]);
 }

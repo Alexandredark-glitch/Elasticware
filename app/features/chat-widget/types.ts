@@ -8,6 +8,6 @@ export type ChatMessage = {
 export const BOT_GREETING: ChatMessage = {
   id: "greeting",
   sender: "bot",
-  text: "Welcome to Elasticware! I'm your assistant. Ask me about returns, shipping, or anything else — I'm here to help.",
+  text: "Welcome to Elasticware! I can help with returns, shipping, and more. If I don't know the answer, I'll connect you seamlessly to an agent.",
   timestamp: Date.now(),
 };

@@ -1,6 +1,7 @@
-import { useId, useState, type FormEvent } from "react";
+import { useId, useState, type FormEvent, useEffect } from "react";
 import { cn } from "../../lib/utils";
 import { Form, useActionData, useNavigation, Link } from "react-router";
+import { useGlobalError } from "~/hooks/useGlobalError";
 
 export function SignupForm() {
   const nameId = useId();
@@ -14,11 +15,16 @@ export function SignupForm() {
   const [agree, setAgree] = useState(false);
   const [errors, setErrors] = useState<{ name?: string; email?: string; password?: string; confirm?: string; agree?: string }>({});
   
+ const { setError } = useGlobalError();
   const actionData = useActionData<{ error?: string; message?: string }>();
 const navigation = useNavigation();
 const isSubmitting = navigation.state === "submitting";
 
-
+   useEffect(() => {
+    if (actionData?.error) {
+      setError(actionData.error);
+    }
+  }, [actionData?.error, setError]);
 
   function validate() {
     const e: typeof errors = {};
@@ -51,11 +57,7 @@ const isSubmitting = navigation.state === "submitting";
         <div className="p-7">
           <h1 className="font-heading text-2xl font-bold text-cream-100 mb-1">Create account</h1>
           <p className="text-sm text-charcoal-400 mb-6">Start managing support tickets</p>
-          {actionData?.error && (
-  <div className="mb-4 px-3 py-2 rounded-lg bg-accent-500/10 border border-accent-500/20">
-    <p className="text-xs text-accent-400">{actionData.error}</p>
-  </div>
-)}
+          
 {actionData?.message && (
   <div className="mb-4 px-3 py-2 rounded-lg bg-teal-500/10 border border-teal-500/20">
     <p className="text-xs text-teal-400">{actionData.message}</p>

@@ -9,6 +9,7 @@ export default [
     route("api/messages", "routes/api.messages.tsx"),
     route("login", "routes/login.tsx"),
     route("signup", "routes/signup.tsx"),
-    route("soon", "routes/soon.tsx"),
-    route("logout", "routes/logout.ts"),  
+    route("logout", "routes/logout.ts"),
+    route("kb", "routes/kb.tsx"),  
+    route("api/widget-auth", "routes/api.widget-auth.tsx")
 ] satisfies RouteConfig;

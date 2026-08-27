@@ -1,36 +1,40 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 
-const SESSION_KEY = "ew_session_demo";
-const TICKET_KEY = "ew_ticket_demo";
+export function useWidgetSession(orgKey: string) {
+  const keys = useMemo(
+    () => ({
+      session: `ew_session_${orgKey}`,
+      ticket: `ew_ticket_${orgKey}`,
+    }),
+    [orgKey]
+  );
 
-export function useWidgetSession() {
   const [sessionId, setSessionId] = useState<string>("");
   const [ticketId, setTicketId] = useState<string | null>(null);
 
   useEffect(() => {
-    let sid = localStorage.getItem(SESSION_KEY);
+    let sid = localStorage.getItem(keys.session);
     if (!sid) {
       sid = crypto.randomUUID();
-      localStorage.setItem(SESSION_KEY, sid);
+      localStorage.setItem(keys.session, sid);
     }
     setSessionId(sid);
 
-    const tid = localStorage.getItem(TICKET_KEY); //null on first render.
+    const tid = localStorage.getItem(keys.ticket);
     if (tid) setTicketId(tid);
-  }, []);
+  }, [keys]);
 
-  // useCallback for preventing the infinite loop.
   const saveTicketId = useCallback((id: string) => {
-    localStorage.setItem(TICKET_KEY, id);
+    localStorage.setItem(keys.ticket, id);
     setTicketId(id);
-  }, []); // This runs when 
+  }, [keys]);
 
   const clearSession = useCallback(() => {
-  localStorage.removeItem(SESSION_KEY);
-  localStorage.removeItem(TICKET_KEY);
-  setSessionId(crypto.randomUUID());
-  setTicketId(null);
-}, []);
+    localStorage.removeItem(keys.session);
+    localStorage.removeItem(keys.ticket);
+    setSessionId(crypto.randomUUID());
+    setTicketId(null);
+  }, [keys]);
 
   return { sessionId, ticketId, saveTicketId, clearSession };
 }

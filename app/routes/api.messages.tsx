@@ -1,11 +1,15 @@
 import type { Route } from "./+types/api.messages";
 import { supabaseApi } from "~/lib/supabase/api";
+import { supabaseService } from "~/lib/supabase/service.server";
 import { CreateMessageSchema } from "~/lib/db/schema";
 import { requireAuth } from "~/lib/supabase/auth.server";
+import { handleBotReply } from "~/lib/bot/engine.server";
+import { corsResponse, corsPreflight } from "~/lib/cors";
 
 export async function action({ request }: Route.ActionArgs) {
+  if (request.method === "OPTIONS") return corsPreflight();
   if (request.method !== "POST") {
-    return Response.json({ error: "Method not allowed" }, { status: 405 });
+    return corsResponse({ error: "Method not allowed" }, 405);
   }
 
   const form = await request.formData();
@@ -18,60 +22,75 @@ export async function action({ request }: Route.ActionArgs) {
 
   const parsed = CreateMessageSchema.safeParse(raw);
   if (!parsed.success) {
-    return Response.json(
-      { error: "Invalid input", issues: parsed.error.issues },
-      { status: 400 }
-    );
+    return corsResponse({ error: "Invalid input", issues: parsed.error.issues }, 400);
   }
 
   const { ticket_id, sender: clientSender, content } = parsed.data;
 
-  // Determine which Supabase client to use
   let sender = clientSender;
-  let supabase = supabaseApi; // public client for customers
+  let writeClient = supabaseApi;
 
   if (clientSender === "agent") {
-    const auth = await requireAuth(request); // throws if not logged in
-    sender = "agent";
-    supabase = auth.supabase; // authenticated client for RLS
+    try {
+      const auth = await requireAuth(request);
+      sender = "agent";
+      writeClient = auth.supabase;
+    } catch {
+      return corsResponse({ error: "Unauthorized" }, 401);
+    }
   }
 
-  const { data: ticket, error: ticketError } = await supabase
+
+  const { data: ticket, error: ticketError } = await supabaseService
     .from("tickets")
-    .select("id, status")
+    .select("id, status, org_id")
     .eq("id", ticket_id)
     .single();
 
   if (ticketError || !ticket) {
-    return Response.json({ error: "Ticket not found" }, { status: 404 });
+    return corsResponse({ error: "Ticket not found" }, 404);
   }
 
-  const { error: msgError } = await supabase.from("messages").insert({
+  if (!ticket.org_id) {
+    return corsResponse({ error: "Ticket has no organization" }, 500);
+  }
+
+  const { error: msgError } = await writeClient.from("messages").insert({
     ticket_id,
     sender,
     content,
   });
 
   if (msgError) {
-    return Response.json({ error: "Failed to save message" }, { status: 500 });
+    return corsResponse({ error: "Failed to save message" }, 500);
+  }
+
+  if (sender === "customer" && ticket.status === "bot_handling") {
+    try {
+      await handleBotReply({
+        supabase: supabaseService,
+        ticketId: ticket_id,
+        orgId: ticket.org_id,
+        customerMessage: content,
+      });
+    } catch (err) {
+      console.error("Bot reply failed:", err);
+    }
   }
 
   if (sender === "agent") {
-    const { error: updateError } = await supabase
+    const { error: updateError } = await writeClient
       .from("tickets")
-      .update({
-        status: "open",
-        updated_at: new Date().toISOString(),
-      })
+      .update({ status: "open", updated_at: new Date().toISOString() })
       .eq("id", ticket_id);
 
     if (updateError) {
-      return Response.json(
+      return corsResponse(
         { error: "Message saved, but failed to update ticket status" },
-        { status: 500 }
+        500
       );
     }
   }
 
-  return Response.json({ ok: true });
+  return corsResponse({ ok: true });
 }

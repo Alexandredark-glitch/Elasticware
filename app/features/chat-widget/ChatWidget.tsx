@@ -1,31 +1,35 @@
 import { useState, useEffect } from "react";
 import { useTicketMessages } from "~/hooks/useTicketMessages";
+import { useWidgetSupabase } from "~/hooks/useWidgetSupabase";
 import { useFetcher } from "react-router";
 import { MessageList } from "./MessageList";
 import { Composer } from "./Composer";
 import { BOT_GREETING, type ChatMessage } from "./types";
 import { useWidgetSession } from "../../hooks/useWidgetSession";
-import { supabase } from "~/lib/supabase/supabase.client";
+import { useGlobalError } from "~/hooks/useGlobalError";
 
-export function ChatWidget() {
-  // Two fetchers so resolve never aborts a message send
+export function ChatWidget({ orgKey }: { orgKey: string }) {
   const messageFetcher = useFetcher();
   const resolveFetcher = useFetcher();
 
   const [isOpen, setIsOpen] = useState(false);
-  
-  
-  const { sessionId, ticketId, saveTicketId, clearSession } = useWidgetSession();
 
-  const { data: history = [], isLoading: isLoadingHistory } =
-    useTicketMessages(ticketId); //null on first render (ticketID) so is not enabled
-   
-    
+  const { sessionId, ticketId, saveTicketId, clearSession } =
+    useWidgetSession(orgKey);
 
-  const [sendError, setSendError] = useState<string | null>(null);
+  const { client: scopedClient, error: authError } = useWidgetSupabase(
+    sessionId,
+    orgKey,
+  );
+
+  const { data: history = [], isLoading: isLoadingHistory } = useTicketMessages(
+    ticketId,
+    scopedClient ?? undefined,
+  );
+
+  const { setError, clearError } = useGlobalError();
   const [pendingText, setPendingText] = useState<string | null>(null);
-  
-    // Compute UI messages directly from React Query data
+
   const dbMessages: ChatMessage[] = history.map((m) => ({
     id: m.id,
     sender: m.sender as "customer" | "bot" | "agent",
@@ -39,7 +43,12 @@ export function ChatWidget() {
 
   const optimisticMessage: ChatMessage | null =
     !hasArrived && pendingText
-      ? { id: "pending", sender: "customer", text: pendingText, timestamp: Date.now() }
+      ? {
+          id: "pending",
+          sender: "customer",
+          text: pendingText,
+          timestamp: Date.now(),
+        }
       : null;
 
   const messages: ChatMessage[] = [
@@ -51,46 +60,53 @@ export function ChatWidget() {
   const isSending = messageFetcher.state !== "idle";
   const isEnding = resolveFetcher.state !== "idle";
 
-  // Skeleton ONLY when restoring an old conversation from localStorage
   const isHydrating =
-    Boolean(ticketId) && isLoadingHistory && messages.length === 1 && !pendingText;
+    Boolean(ticketId) &&
+    isLoadingHistory &&
+    messages.length === 1 &&
+    !pendingText;
 
-     useEffect(() => {
-  if (hasArrived) setPendingText(null);
-}, [hasArrived]);
+  useEffect(() => {
+    if (authError) setError(authError);
+  }, [authError, setError]);
 
-  
- useEffect(() => {
-  if (messageFetcher.state !== "idle" || !messageFetcher.data) return;
+  useEffect(() => {
+    if (hasArrived) setPendingText(null);
+  }, [hasArrived]);
 
-  if (messageFetcher.data.error) {
-    setSendError(
-      typeof messageFetcher.data.error === "string"
-        ? messageFetcher.data.error
-        : "Failed to send"
-    );
-  } else {
-    setSendError(null);
-    if (messageFetcher.data.ticket_id) {
-      saveTicketId(messageFetcher.data.ticket_id);
+  useEffect(() => {
+    if (messageFetcher.state !== "idle" || !messageFetcher.data) return;
+
+    if (messageFetcher.data.error) {
+      setError(
+        typeof messageFetcher.data.error === "string"
+          ? messageFetcher.data.error
+          : "Failed to send",
+      );
+    } else {
+      clearError();
+      if (messageFetcher.data.ticket_id) {
+        saveTicketId(messageFetcher.data.ticket_id);
+      }
     }
-  }
-}, [messageFetcher.state, messageFetcher.data, saveTicketId]);
+  }, [messageFetcher.state, messageFetcher.data, saveTicketId, clearError]);
 
-    useEffect(() => {
-  if (resolveFetcher.state !== "idle" || !resolveFetcher.data) return;
+  useEffect(() => {
+    if (resolveFetcher.state !== "idle" || !resolveFetcher.data) return;
 
-  if (resolveFetcher.data.ok) {
-    clearSession();
-    setPendingText(null);
-    setSendError(null);
-  }
-}, [resolveFetcher.state, resolveFetcher.data, clearSession]);
+    if (resolveFetcher.data.ok) {
+      clearSession();
+      setPendingText(null);
+      clearError()
+      
+    }
+  }, [resolveFetcher.state, resolveFetcher.data, clearSession, clearError]); 
 
-    useEffect(() => {
-    if (!ticketId) return;
+  /* ─── Realtime: ticket resolved externally ─── */
+  useEffect(() => {
+    if (!ticketId || !scopedClient) return;
 
-    const channel = supabase
+    const channel = scopedClient
       .channel(`ticket-status:${ticketId}`)
       .on(
         "postgres_changes",
@@ -101,50 +117,50 @@ export function ChatWidget() {
           filter: `id=eq.${ticketId}`,
         },
         (payload) => {
-         if (payload.new.status === "resolved") {
-  clearSession();
-  setPendingText(null);
-  setSendError(null);
-}
-        }
+          if (payload.new.status === "resolved") {
+            clearSession();
+            setPendingText(null);
+            clearError();
+          }
+        },
       )
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      scopedClient.removeChannel(channel);
     };
-  }, [ticketId, clearSession]); // This only listen when there is a ticket. Since that's our only update, it's dead code until there is a ticket.
+  }, [ticketId, clearSession, scopedClient]);
 
-  // -------------------------------------------------------------------------
-  // Actions
-  // -------------------------------------------------------------------------
   const handleSend = (text: string) => {
     const trimmed = text.trim();
     if (!trimmed || isSending) return;
 
-    setSendError(null);
-    setPendingText(trimmed); //Optimistic update
+    clearError();
+    setPendingText(trimmed);
 
     if (!ticketId) {
       messageFetcher.submit(
-        { org_key: "demo", session_id: sessionId, content: trimmed },
-        { method: "post", action: "/api/tickets" }
+        { org_key: orgKey, session_id: sessionId, content: trimmed },
+        { method: "post", action: "/api/tickets" },
       );
     } else {
       messageFetcher.submit(
         { ticket_id: ticketId, sender: "customer", content: trimmed },
-        { method: "post", action: "/api/messages" }
+        { method: "post", action: "/api/messages" },
       );
     }
   };
 
-    const handleEndChat = () => {
+  const handleEndChat = () => {
     if (!ticketId || isEnding) return;
+    clearError()
     resolveFetcher.submit(
       { intent: "resolve", ticket_id: ticketId },
-      { method: "post", action: "/api/tickets" }
+      { method: "post", action: "/api/tickets" },
     );
   };
+
+  const isAuthenticating = !scopedClient && !authError;
 
   return (
     <>
@@ -155,7 +171,6 @@ export function ChatWidget() {
           aria-label="Open chat"
         >
           <span className="w-5 h-5 flex items-center justify-center">
-            {/* svg goes here */}
             <svg
               xmlns="http://www.w3.org/2000/svg"
               viewBox="0 0 24 24"
@@ -174,24 +189,21 @@ export function ChatWidget() {
       )}
 
       {isOpen && (
-        <div className="fixed bottom-6 right-6 z-50 w-[calc(100vw-3rem)] sm:w-96 h-[32rem] max-h-[80vh] bg-charcoal-800 border border-charcoal-600 rounded-2xl shadow-2xl shadow-charcoal-950/50 flex flex-col overflow-hidden animate-bounce-in">
-         
-          {sendError && (
-            <div className="px-4 py-2 bg-accent-500/10 border-b border-accent-500/20 flex-shrink-0">
-              <p className="text-xs text-accent-400">
-                Failed to send: {sendError}
-              </p>
-            </div>
-          )}
-
-         
+        <div 
+         role="dialog"
+          aria-modal="true"
+          aria-labelledby="chat-widget-title"
+          tabIndex={-1}
+        className="fixed bottom-6 right-6 z-50 w-[calc(100vw-3rem)] sm:w-96 h-[32rem] max-h-[80vh] bg-charcoal-800 border border-charcoal-600 rounded-2xl shadow-2xl shadow-charcoal-950/50 flex flex-col overflow-hidden animate-bounce-in">
           <div className="flex items-center justify-between px-4 py-3 bg-charcoal-900 border-b border-charcoal-700">
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-full bg-teal-500/20 border border-teal-500/30 flex items-center justify-center">
                 <span className="w-3 h-3 rounded-full bg-teal-400 animate-pulse" />
               </div>
               <div>
-                <p className="text-sm font-semibold text-cream-100">
+                <p
+                id="chat-widget-title"
+                className="text-sm font-semibold text-cream-100">
                   ElasticBot
                 </p>
                 <p className="text-xs text-teal-400">Online now</p>
@@ -199,7 +211,7 @@ export function ChatWidget() {
             </div>
 
             <div className="flex items-center gap-2">
-                            {ticketId && (
+              {ticketId && (
                 <button
                   onClick={handleEndChat}
                   disabled={isEnding}
@@ -217,7 +229,6 @@ export function ChatWidget() {
                 className="w-8 h-8 flex items-center justify-center text-charcoal-300 hover:text-cream-100 hover:bg-charcoal-700 rounded-lg transition-colors focus-ring"
                 aria-label="Close chat"
               >
-                
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
                   viewBox="0 0 24 24"
@@ -235,20 +246,15 @@ export function ChatWidget() {
             </div>
           </div>
 
-         
-          {isHydrating ? (
+          {isAuthenticating ? (
+            <div className="flex-1 flex items-center justify-center">
+              <span className="text-sm text-charcoal-400">Connecting…</span>
+            </div>
+          ) : isHydrating ? (
             <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
               <div className="flex flex-col gap-1.5 items-start">
                 <div className="h-3 w-16 rounded bg-charcoal-700 animate-pulse" />
                 <div className="h-10 w-44 rounded-2xl rounded-bl-md bg-charcoal-700 animate-pulse" />
-              </div>
-              <div className="flex flex-col gap-1.5 items-end">
-                <div className="h-3 w-20 rounded bg-charcoal-700 animate-pulse" />
-                <div className="h-14 w-52 rounded-2xl rounded-br-md bg-charcoal-700 animate-pulse" />
-              </div>
-              <div className="flex flex-col gap-1.5 items-start">
-                <div className="h-3 w-16 rounded bg-charcoal-700 animate-pulse" />
-                <div className="h-10 w-40 rounded-2xl rounded-bl-md bg-charcoal-700 animate-pulse" />
               </div>
             </div>
           ) : (

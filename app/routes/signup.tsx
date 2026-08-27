@@ -20,7 +20,7 @@ export async function action({ request }: Route.ActionArgs) {
     return Response.json({ error: "Password must be at least 8 characters" }, { headers });
   }
 
-  // 1. Create auth user
+  
   const { data: authData, error: signUpError } = await supabase.auth.signUp({
     email,
     password,
@@ -46,7 +46,7 @@ export async function action({ request }: Route.ActionArgs) {
     return Response.json({ error: "Failed to create organization" }, { headers });
   }
 
-  // 3. Link agent to org
+
   const { error: agentError } = await supabase
   .from("agents")
   .insert({
@@ -60,15 +60,8 @@ export async function action({ request }: Route.ActionArgs) {
     return Response.json({ error: "Failed to link agent account" }, { headers });
   }
 
-  // 4. No session = email confirmation required
-  if (!authData.session) {
-    return Response.json(
-      { error: null, message: "Check your email to confirm your account before signing in." },
-      { headers }
-    );
-  }
 
-  // 5. Has session = auto-redirect
+ 
   throw redirect("/dashboard", { headers });
 }
 

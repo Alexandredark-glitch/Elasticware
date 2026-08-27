@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 
-export function SplitView() {
+export function SplitView({ orgSlug }: { orgSlug: string }) {
   const shopRef = useRef<HTMLIFrameElement>(null);
   const dashRef = useRef<HTMLIFrameElement>(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -13,19 +13,6 @@ export function SplitView() {
     <div className="h-screen flex flex-col bg-charcoal-950">
       <header className="flex-shrink-0 border-b border-charcoal-700 bg-charcoal-900">
         <div className="flex items-center justify-between px-4 sm:px-6 py-3">
-          <div className="flex items-center gap-3">
-            <svg
-              fill="none"
-              height="48"
-              viewBox="0 0 48 48"
-              width="48"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <g fill="#fff">
-                <path d="m0 6c10.1433 9.4404 25.8567 9.4404 36 0-9.4404 10.1433-9.4404 25.8567 0 36-10.1433-9.4404-25.8567-9.4404-36 0 9.44041-10.1433 9.44041-25.8567 0-36z" />
-              </g>
-            </svg>
-          </div>
           <button
             onClick={reloadBoth}
             className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-cream-100 bg-charcoal-700 hover:bg-charcoal-600 border border-charcoal-600 rounded-lg transition-colors focus-ring"
@@ -48,7 +35,7 @@ export function SplitView() {
             Reload both
           </button>
         </div>
-        <div className="tent-stripe-thin h-0.5" />
+        
       </header>
 
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 min-h-0">
@@ -63,7 +50,7 @@ export function SplitView() {
             <iframe
               key={`shop-${reloadKey}`}
               ref={shopRef}
-              src="/mock-shop"
+               src={`/mock-shop?org=${encodeURIComponent(orgSlug)}`}
               title="Mock Shop"
               className="w-full h-full"
             />

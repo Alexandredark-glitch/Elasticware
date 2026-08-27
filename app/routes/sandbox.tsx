@@ -1,13 +1,21 @@
 import type { Route } from "./+types/sandbox";
 import { SplitView } from "~/features/sandbox/SplitView";
 import { requireAuth } from "~/lib/supabase/auth.server";
+import {useLoaderData} from "react-router"
 
 export async function loader({ request }: Route.LoaderArgs) {
-  await requireAuth(request);
-  return null;
+  const { supabase, orgId } = await requireAuth(request);
+
+  const { data: org } = await supabase
+    .from("organizations")
+    .select("slug")
+    .eq("id", orgId)
+    .single();
+
+  return { orgSlug: org?.slug ?? "demo" };
 }
 
-export function meta ({}:Route.MetaArgs) {
+export function meta({}: Route.MetaArgs) {
   return [
     { title: "Sandbox — Elasticware" },
     {
@@ -26,5 +34,6 @@ export function meta ({}:Route.MetaArgs) {
 }
 
 export default function SandboxRoute() {
-  return <SplitView />;
+  const { orgSlug } = useLoaderData<typeof loader>();
+  return <SplitView orgSlug={orgSlug} />;
 }

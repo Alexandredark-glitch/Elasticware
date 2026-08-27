@@ -1,0 +1,11 @@
+<svg fill="none" height="48" viewBox="0 0 48 48" width="48" xmlns="http://www.w3.org/2000/svg">
+  <style>
+    path { fill: #1a1a1a; } /* Default dark color for light theme tabs */
+    @media (prefers-color-scheme: dark) {
+      path { fill: #ffffff; } /* Switches to white for dark theme tabs */
+    }
+  </style>
+  <g>
+    <path d="m0 6c10.1433 9.4404 25.8567 9.4404 36 0-9.4404 10.1433-9.4404 25.8567 0 36-10.1433-9.4404-25.8567-9.4404-36 0 9.44041-10.1433 9.44041-25.8567 0-36z"/>
+  </g>
+</svg>

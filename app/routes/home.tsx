@@ -288,8 +288,9 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <footer className="border-t border-charcoal-700">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 flex flex-col sm:flex-row items-center justify-between gap-4">
+      <footer className="border-t border-charcoal-700 text-2xl font-bold">
+        <div className="text-center px-4 sm:px-6 py-8">
+        <h1>Built by <a className="hover:underline" href="https://github.com/Alexandredark-glitch" target="blank">Fortunat Hitantsoa Alexandre</a></h1>
         </div>
       </footer>
     </div>

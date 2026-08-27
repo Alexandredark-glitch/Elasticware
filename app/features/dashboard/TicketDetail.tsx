@@ -97,9 +97,6 @@ export function TicketDetail({ ticket} : { ticket: QueueTicket | undefined }) {
  const pendingText = sendFetcher.formData?.get("content") as string | undefined;
  const isSubmitting = sendFetcher.state !== "idle";
 
-// Race-condition guard: realtime can deliver the DB row before the fetcher
-// transitions back to idle. If the last confirmed message matches our pending
-// text, the optimistic bubble is redundant — hide it. AI CODE
 const lastMessage = messages.at(-1);
 const alreadyArrived =
   isSubmitting && pendingText

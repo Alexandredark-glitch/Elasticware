@@ -1,11 +1,13 @@
-import { useId, useState, type FormEvent } from "react";
+import { useId, useState, type FormEvent, useEffect } from "react";
 import { Form, useActionData, useNavigation, Link } from "react-router";
 import { cn } from "../../lib/utils";
+import { useGlobalError } from "~/hooks/useGlobalError";
 
 export function LoginForm() {
   const actionData = useActionData<{ error?: string }>();
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
+  const { setError } = useGlobalError();
 
   const emailId = useId();
   const passwordId = useId();
@@ -13,6 +15,12 @@ export function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+
+  useEffect(() => {
+  if (actionData?.error) {
+    setError(actionData.error);
+  }
+}, [actionData?.error, setError]);
 
   function validate() {
 
@@ -50,11 +58,7 @@ export function LoginForm() {
             Sign in to your agent dashboard
           </p>
 
-          {actionData?.error && (
-            <div className="mb-4 px-3 py-2 rounded-lg bg-accent-500/10 border border-accent-500/20">
-              <p className="text-xs text-accent-400">{actionData.error}</p>
-            </div>
-          )}
+          
 
           <Form method="post" onSubmit={handleSubmit} noValidate className="space-y-4">
             <div>

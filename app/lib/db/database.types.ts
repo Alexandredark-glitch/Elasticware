@@ -50,6 +50,7 @@ export type Database = {
         Row: {
           content: string
           created_at: string
+          embedding: string | null
           id: string
           org_id: string
           title: string
@@ -58,6 +59,7 @@ export type Database = {
         Insert: {
           content: string
           created_at?: string
+          embedding?: string | null
           id?: string
           org_id?: string
           title: string
@@ -66,6 +68,7 @@ export type Database = {
         Update: {
           content?: string
           created_at?: string
+          embedding?: string | null
           id?: string
           org_id?: string
           title?: string
@@ -186,7 +189,20 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      match_kb_articles: {
+        Args: {
+          match_count: number
+          match_org_id: string
+          match_threshold: number
+          query_embedding: string
+        }
+        Returns: {
+          content: string
+          id: string
+          similarity: number
+          title: string
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never

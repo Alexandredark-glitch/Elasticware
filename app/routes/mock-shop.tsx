@@ -1,6 +1,7 @@
 import type { Route } from "./+types/mock-shop";
 import { Storefront } from "../features/mock-shop/Storefront";
 import { ChatWidget } from "../features/chat-widget/ChatWidget";
+import { useSearchParams } from "react-router";
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -21,10 +22,13 @@ export function meta({}: Route.MetaArgs) {
 }
 
 export default function MockShopRoute() {
+  const [searchParams] = useSearchParams();
+  const orgKey = searchParams.get("org") || "demo";
+
   return (
     <>
       <Storefront />
-      <ChatWidget />
+      <ChatWidget orgKey={orgKey} />
     </>
   );
 }
