@@ -1,8 +1,24 @@
-import { Form } from "react-router";
+import { Form, useNavigation } from "react-router";
+import { useRef, useEffect } from "react";
 
 export function ArticleEditor() {
+  const { state } = useNavigation();
+  const formRef = useRef<HTMLFormElement>(null);
+  const justFinished = useRef(false);
+
+  useEffect(() => {
+    if (state === "submitting" || state === "loading") {
+      justFinished.current = true;
+    } else if (justFinished.current) {
+      justFinished.current = false;
+      formRef.current?.reset();
+    }
+  }, [state]);
+
+  const busy = state !== "idle";
+
   return (
-    <Form method="post" className="mb-8 space-y-3">
+    <Form ref={formRef} method="post" className="mb-8 space-y-3">
       <input
         name="title"
         placeholder="Article title"
@@ -20,9 +36,10 @@ export function ArticleEditor() {
         type="submit"
         name="intent"
         value="create"
-        className="px-4 py-2 bg-accent-500 rounded-lg text-sm font-medium text-white"
+        disabled={busy}
+        className="px-4 py-2 bg-accent-500 rounded-lg text-sm font-medium text-white disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        Add Article
+        {busy ? "Adding..." : "Add Article"}
       </button>
     </Form>
   );
