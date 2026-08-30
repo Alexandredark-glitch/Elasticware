@@ -22,6 +22,9 @@ Recommended flow:
 # Test
 # Enter Knowledge base
 # Copy CDN
+# Paste CDN:
+<img width="1920" height="897" alt="cdn" src="https://github.com/user-attachments/assets/e55503de-87a5-4778-8e25-de7c54e81082" />
+
 # Test
 
 
