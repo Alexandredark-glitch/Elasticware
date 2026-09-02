@@ -1,5 +1,6 @@
 import { embedText, generateReply } from "~/lib/ai/gemini.server";
 import type { createSupabaseServerClient } from "~/lib/supabase/supabase.server";
+import { Sentry } from "~/lib/sentry.server";
 
 type Supabase = ReturnType<typeof createSupabaseServerClient>["supabase"];
 
@@ -64,6 +65,7 @@ export async function handleBotReply({
 
     return { replied: true, escalated: false };
   } catch (err) {
+    Sentry.captureException(err);
     console.error("Bot error:", err);
     await escalate(supabase, ticketId);
     return { replied: false, escalated: true, error: true };

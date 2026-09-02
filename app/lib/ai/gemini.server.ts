@@ -1,3 +1,4 @@
+import { Sentry } from "~/lib/sentry.server";
 const KEYS = [
   process.env.GEMINI_KEY_1,
   process.env.GEMINI_KEY_2,
@@ -48,6 +49,7 @@ async function withRotation<T>(fn: (key: string) => Promise<T>): Promise<T> {
     try {
       return await fn(key);
     } catch (e) {
+      Sentry.captureException(e);
       const msg = e instanceof Error ? e.message : "";
       if (msg.includes("429") || msg.includes("exhausted")) continue;
       throw e;

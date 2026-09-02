@@ -14,6 +14,7 @@ import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { useState, useEffect } from "react";
 import { ErrorProvider } from "~/hooks/useGlobalError";
 import { ErrorToast } from "~/features/error/ErrorToast";
+import {Analytics} from "@vercel/analytics/react";
 
 import type { Route } from "./+types/root";
 import "./app.css";
@@ -67,6 +68,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         {children}
         <ScrollRestoration />
         <Scripts />
+        <Analytics /> 
       </body>
     </html>
   );

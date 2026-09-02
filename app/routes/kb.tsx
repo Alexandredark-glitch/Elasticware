@@ -15,6 +15,7 @@ import {
 
 import { ArticleList } from "~/features/kb-admin/ArticleList";
 import { ArticleEditor } from "~/features/kb-admin/ArticleEditor";
+import { Sentry } from "~/lib/sentry.server";
 
 
 type LoaderData = {
@@ -85,6 +86,7 @@ export async function action({ request }: Route.ActionArgs) {
       { headers, status: 400 }
     );
   } catch (err) {
+    Sentry.captureException(err);
     const message = err instanceof Error ? err.message : "Something went wrong";
     return Response.json(
       { ok: false, error: message } satisfies ActionData,
