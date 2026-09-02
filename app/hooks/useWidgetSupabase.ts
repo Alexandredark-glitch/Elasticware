@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "~/lib/db/database.types";
-import { Sentry } from "~/lib/sentry.server";
 
 type SupabaseClient = ReturnType<typeof createClient<Database>>;
 
@@ -46,7 +45,6 @@ export function useWidgetSupabase(sessionId: string, orgKey: string = "demo") {
 
         if (!cancelled) setClient(supabase);
       } catch (err) {
-        Sentry.captureException(err);
         if (cancelled) return;
 
         if (attempt < 3) {

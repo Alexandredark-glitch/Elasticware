@@ -1,5 +1,6 @@
 import type { Route } from "./+types/home";
 import { Link } from "react-router";
+import * as Sentry from '@sentry/react';
 
 
 export function meta({}: Route.MetaArgs) {
@@ -75,6 +76,14 @@ export default function LandingPage() {
             >
               Dashboard
             </Link>
+
+            <button
+      onClick={() => {
+        throw new Error('This is your first error!');
+      }}
+    >
+      Break the world
+    </button>
           </nav>
         </div>
        
