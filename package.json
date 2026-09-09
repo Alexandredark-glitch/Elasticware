@@ -7,7 +7,7 @@
     "dev": "react-router dev",
     "start": "dotenv -e .env.local -- react-router-serve ./build/server/index.js",
     "typecheck": "react-router typegen && tsc",
-    "db:types": "supabase gen types typescript --project-id hoalkqukcfppaurrlicw > app/lib/db/database.types.ts",
+    "db:types": "supabase gen types typescript --project-id gryjylxwvgoofdafhbvy > app/lib/db/database.types.ts",
     "build:widget": "vite build --config vite.widget.config.ts",
     "widget:dev": "npm run build:widget && npx serve public -l 5174 --cors"
   },

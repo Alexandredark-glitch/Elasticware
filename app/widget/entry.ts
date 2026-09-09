@@ -37,7 +37,7 @@ const createBotGreeting = (): ChatMessage => ({
   timestamp: Date.now(),
 });
 
-const BOT_GREETING = createBotGreeting;
+
 
 
 const CLS = {
@@ -466,15 +466,33 @@ const render = (shadow: ShadowRoot, state: State, actions: Actions) => {
   }
 };
 
-/* ─── Bootstrap ─── */
+
 /* ─── Bootstrap ─── */
 async function init() {
-  if (typeof window === "undefined") return;
 
    if (__supabaseClient) {
-    await __supabaseClient.removeAllChannels();
+    const oldClient = __supabaseClient;
     __supabaseClient = null;
+
+    try {
+      await oldClient.removeAllChannels();
+    } catch (err) {
+      console.error(
+        "ElasticBot: failed to remove old Supabase channels",
+        err,
+      );
+    }
+
+    try {
+      oldClient.realtime.disconnect();
+    } catch (err) {
+      console.error(
+        "ElasticBot: failed to disconnect old Supabase Realtime client",
+        err,
+      );
+    }
   }
+
 
   const script = getScript();
   const orgKey = script.dataset.orgKey;
@@ -498,95 +516,229 @@ async function init() {
 
   localStorage.setItem(lsKey(orgKey, "session"), state.sessionId);
 
-  /* ─── Authenticate with Supabase ─── */
-  let supabase: ReturnType<typeof createClient<Database>>;
-  try {
-    const token = await fetchWidgetToken(apiBase, state.sessionId, orgKey);
-    const url = import.meta.env.VITE_SUPABASE_URL;
-    const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-    if (!url || !key) throw new Error("ElasticBot: missing Supabase env vars");
-        supabase = createClient<Database>(url, key, {
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false,
-        detectSessionInUrl: false,
-      },
-      global: {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      },
-    });
-    supabase.realtime.setAuth(token);
-        __supabaseClient = supabase; 
-  } catch (err) {
-    console.error("ElasticBot: failed to authenticate", err);
-    return;
+/* ─── Supabase client lifecycle ─── */
+
+type SupabaseClient = ReturnType<typeof createClient<Database>>;
+type RealtimeChannel = ReturnType<SupabaseClient["channel"]>;
+
+let supabase: SupabaseClient | null = null;
+
+const createWidgetSupabase = async (): Promise<SupabaseClient> => {
+  const token = await fetchWidgetToken(
+    apiBase,
+    state.sessionId,
+    orgKey
+  );
+
+  const url = import.meta.env.VITE_SUPABASE_URL;
+  const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
+  if (!url || !key) {
+    throw new Error("ElasticBot: missing Supabase env vars");
   }
 
+  const client = createClient<Database>(url, key, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    },
+    global: {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  });
+
+  client.realtime.setAuth(token);
+
+  return client;
+};
+
+const destroySupabase = async () => {
+  if (!supabase) return;
+
+  const client = supabase;
+
+  // Immediately invalidate our reference.
+  supabase = null;
+
+  // This client is no longer the active widget client.
+  if (__supabaseClient === client) {
+    __supabaseClient = null;
+  }
+
+  try {
+    await client.removeAllChannels();
+  } catch (err) {
+    console.error("ElasticBot: failed to remove Supabase channels", err);
+  }
+
+  try {
+    client.realtime.disconnect();
+  } catch (err) {
+    console.error("ElasticBot: failed to disconnect Supabase Realtime", err);
+  }
+};
+
+try {
+  supabase = await createWidgetSupabase();
+  __supabaseClient = supabase;
+} catch (err) {
+  console.error("ElasticBot: failed to authenticate", err);
+  return;
+}
+
   /* Realtime */
-  let msgChannel: ReturnType<typeof supabase.channel> | null = null;
-  let ticketChannel: ReturnType<typeof supabase.channel> | null = null;
+  let msgChannel: RealtimeChannel | null = null;
+let ticketChannel: RealtimeChannel | null = null;
+  let channelGeneration = 0;
     const seenMessageIds = new Set<string>();
 
-      const clearChannels = async () => {
-    const oldMsg = msgChannel;
-    const oldTicket = ticketChannel;
-    msgChannel = null;
-    ticketChannel = null;
-    if (oldMsg) await supabase.removeChannel(oldMsg);
-    if (oldTicket) await supabase.removeChannel(oldTicket);
-  };
+    const clearChannels = async () => {
+  channelGeneration++;
 
-    const clearSession = async () => {
+  const messageChannel = msgChannel;
+  const statusChannel = ticketChannel;
+
+  msgChannel = null;
+  ticketChannel = null;
+
+  if (!supabase) return;
+
+  const client = supabase;
+
+  await Promise.all([
+    messageChannel
+      ? client.removeChannel(messageChannel)
+      : Promise.resolve(),
+
+    statusChannel
+      ? client.removeChannel(statusChannel)
+      : Promise.resolve(),
+  ]);
+};
+    let clearingSession = false;
+
+
+const clearSession = async () => {
+  if (clearingSession) return;
+
+  clearingSession = true;
+
+  try {
     state.ticketId = null;
     state.messages = [createBotGreeting()];
     state.error = null;
-    state.pending = false; 
-    seenMessageIds.clear(); 
+    state.pending = false;
+
+    seenMessageIds.clear();
+
     localStorage.removeItem(lsKey(orgKey, "ticket"));
+
     await clearChannels();
-  };
+    await destroySupabase();
+  } finally {
+    clearingSession = false;
+  }
+};
 
-         const subscribeToMessages = () => {
-    if (!state.ticketId || msgChannel) return;
-    const subscribedTicketId = state.ticketId;
+           const subscribeToMessages = () => {
+    if (
+      !supabase ||
+      !state.ticketId ||
+      msgChannel
+    ) {
+      return;
+    }
 
-    msgChannel = supabase
-      .channel(`widget-msgs-${state.ticketId}`)
+    const client = supabase;
+
+    const subscribedTicketId =
+      state.ticketId;
+
+    const subscribedGeneration =
+      channelGeneration;
+
+    const channel = client
+      .channel(
+        `widget-msgs-${subscribedTicketId}`,
+      )
       .on(
         "postgres_changes",
         {
           event: "INSERT",
           schema: "public",
           table: "messages",
-          filter: `ticket_id=eq.${state.ticketId}`,
+          filter: `ticket_id=eq.${subscribedTicketId}`,
         },
         (payload) => {
-          const raw = payload.new as { id: string; sender: string; content: string; ticket_id?: string };
+          // Ignore events from an old channel lifecycle.
+          if (
+            subscribedGeneration !==
+            channelGeneration
+          ) {
+            return;
+          }
 
-          // CRITICAL: ignore events from old tickets that fire after clearSession
-          if (raw.ticket_id && raw.ticket_id !== state.ticketId) return;
-          if (subscribedTicketId !== state.ticketId) return;
-          if (seenMessageIds.has(raw.id)) return;
+          const raw = payload.new as {
+            id: string;
+            sender: string;
+            content: string;
+            ticket_id?: string;
+          };
+
+          // Ignore events for another ticket.
+          if (
+            raw.ticket_id &&
+            raw.ticket_id !== state.ticketId
+          ) {
+            return;
+          }
+
+          if (
+            subscribedTicketId !== state.ticketId
+          ) {
+            return;
+          }
+
+          // Ignore messages already loaded from history.
+          if (
+            seenMessageIds.has(raw.id)
+          ) {
+            return;
+          }
+
           seenMessageIds.add(raw.id);
 
-          // Search backwards for matching optimistic message
           let replaced = false;
-          for (let i = state.messages.length - 1; i >= 0; i--) {
+
+          // Replace optimistic customer message.
+          for (
+            let i = state.messages.length - 1;
+            i >= 0;
+            i--
+          ) {
             const m = state.messages[i];
-            if (m.id.startsWith("cust-") && m.sender === "customer" && m.text === raw.content) {
+
+            if (
+              m.id.startsWith("cust-") &&
+              m.sender === "customer" &&
+              m.text === raw.content
+            ) {
               state.messages[i] = {
                 id: raw.id,
                 sender: raw.sender as Sender,
                 text: raw.content,
                 timestamp: Date.now(),
               };
+
               replaced = true;
               break;
             }
           }
 
+          // Otherwise append the realtime message.
           if (!replaced) {
             state.messages.push({
               id: raw.id,
@@ -595,64 +747,171 @@ async function init() {
               timestamp: Date.now(),
             });
           }
-          render(shadow, state, actions);
-        }
-      )
-      .subscribe((status, err) => {
-        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED" || err) {
-          console.error(`[Realtime] Message subscription ${status}:`, err);
+
+          render(
+            shadow,
+            state,
+            actions,
+          );
+        },
+      );
+
+    msgChannel = channel;
+
+    channel.subscribe((status, err) => {
+      console.log(
+        `[Realtime] Message subscription ${subscribedTicketId}:`,
+        status,
+        err,
+      );
+
+      if (
+        status === "CHANNEL_ERROR" ||
+        status === "TIMED_OUT" ||
+        status === "CLOSED" ||
+        err
+      ) {
+        console.error(
+          `[Realtime] Message subscription ${status}:`,
+          err,
+        );
+
+        if (msgChannel === channel) {
           msgChannel = null;
         }
-      });
+      }
+    });
   };
 
           const subscribeToTicket = () => {
-    if (!state.ticketId || ticketChannel) return;
-    const subscribedTicketId = state.ticketId;
+    if (
+      !supabase ||
+      !state.ticketId ||
+      ticketChannel
+    ) {
+      return;
+    }
 
-    ticketChannel = supabase
-      .channel(`widget-ticket-${state.ticketId}`)
+    const client = supabase;
+
+    const subscribedTicketId =
+      state.ticketId;
+
+    const subscribedGeneration =
+      channelGeneration;
+
+    const channel = client
+      .channel(
+        `widget-ticket-${subscribedTicketId}`,
+      )
       .on(
         "postgres_changes",
         {
           event: "UPDATE",
           schema: "public",
           table: "tickets",
-          filter: `id=eq.${state.ticketId}`,
+          filter: `id=eq.${subscribedTicketId}`,
         },
         async (payload) => {
-          const raw = payload.new as { status: string; id: string };
+          if (
+            subscribedGeneration !==
+            channelGeneration
+          ) {
+            return;
+          }
 
-          // CRITICAL: ignore events from old tickets that fire after clearSession
-          if (raw.id !== state.ticketId || subscribedTicketId !== state.ticketId) return;
+          const raw = payload.new as {
+            status: string;
+            id: string;
+          };
+
+          if (
+            raw.id !== state.ticketId
+          ) {
+            return;
+          }
+
+          if (
+            subscribedTicketId !==
+            state.ticketId
+          ) {
+            return;
+          }
 
           if (raw.status === "resolved") {
             await clearSession();
-            render(shadow, state, actions);
-          } else if (raw.status === "open") {
-            render(shadow, state, actions);
+
+            render(
+              shadow,
+              state,
+              actions,
+            );
+          } else if (
+            raw.status === "open"
+          ) {
+            render(
+              shadow,
+              state,
+              actions,
+            );
           }
-        }
-      )
-      .subscribe((status, err) => {
-        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED" || err) {
-          console.error(`[Realtime] Ticket subscription ${status}:`, err);
+        },
+      );
+
+    ticketChannel = channel;
+
+    channel.subscribe((status, err) => {
+      console.log(
+        `[Realtime] Ticket subscription ${subscribedTicketId}:`,
+        status,
+        err,
+      );
+
+      if (
+        status === "CHANNEL_ERROR" ||
+        status === "TIMED_OUT" ||
+        status === "CLOSED" ||
+        err
+      ) {
+        console.error(
+          `[Realtime] Ticket subscription ${status}:`,
+          err,
+        );
+
+        if (
+          ticketChannel === channel
+        ) {
           ticketChannel = null;
         }
-      });
+      }
+    });
   };
 
-    if (state.ticketId) {
-    subscribeToMessages();
-    subscribeToTicket();
-    fetchHistory(supabase, state.ticketId).then((history) => {
-      state.messages = [createBotGreeting(), ...history];
+      if (state.ticketId) {
+  if (!supabase) {
+    console.error("ElasticBot: Supabase client missing");
+    return;
+  }
+
+  subscribeToMessages();
+  subscribeToTicket();
+
+  fetchHistory(supabase, state.ticketId)
+    .then((history) => {
+      state.messages = [
+        createBotGreeting(),
+        ...history,
+      ];
+
       history.forEach((m) => seenMessageIds.add(m.id));
+
       render(shadow, state, actions);
-    }).catch((err) => {
+    })
+    .catch((err) => {
       console.error("ElasticBot: failed to load history", err);
     });
-  }
+}
+
 
   /* Actions */
   const actions: Actions = {
@@ -703,28 +962,49 @@ async function init() {
       render(shadow, state, actions);
 
       try {
-        if (!state.ticketId) {
-          const res = await fetch(`${apiBase}/api/tickets`, {
-            method: "POST",
-            body: new URLSearchParams({
-              org_key: state.orgKey,
-              session_id: state.sessionId,
-              content: text,
-            }),
-          });
-          const data = await res.json();
-          if (!res.ok) throw new Error(data.error || "Failed to create ticket");
+       if (!state.ticketId) {
+  const res = await fetch(`${apiBase}/api/tickets`, {
+    method: "POST",
+    body: new URLSearchParams({
+      org_key: state.orgKey,
+      session_id: state.sessionId,
+      content: text,
+    }),
+  });
 
-          const newTicketId: string = data.ticket_id;
-          state.ticketId = newTicketId;
-          localStorage.setItem(lsKey(orgKey, "ticket"), newTicketId);
+  const data = await res.json();
 
-          const history = await fetchHistory(supabase, newTicketId);
-          state.messages = [createBotGreeting(), ...history];
-          history.forEach((m) => seenMessageIds.add(m.id));
-          subscribeToMessages();
-          subscribeToTicket();
-        } else {
+  if (!res.ok) {
+    throw new Error(data.error || "Failed to create ticket");
+  }
+
+  const newTicketId: string = data.ticket_id;
+
+  state.ticketId = newTicketId;
+
+  localStorage.setItem(lsKey(orgKey, "ticket"), newTicketId);
+
+  if (!supabase) {
+    supabase = await createWidgetSupabase();
+    __supabaseClient = supabase;
+  }
+
+  const client = supabase;
+
+  if (!client) {
+    throw new Error("ElasticBot: Supabase client unavailable");
+  }
+
+  const history = await fetchHistory(client, newTicketId);
+
+  state.messages = [createBotGreeting(), ...history];
+
+  history.forEach((m) => seenMessageIds.add(m.id));
+
+  subscribeToMessages();
+  subscribeToTicket();
+}
+         else {
           const res = await fetch(`${apiBase}/api/messages`, {
             method: "POST",
             body: new URLSearchParams({
