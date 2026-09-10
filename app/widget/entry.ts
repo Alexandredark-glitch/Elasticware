@@ -759,11 +759,6 @@ const clearSession = async () => {
     msgChannel = channel;
 
     channel.subscribe((status, err) => {
-      console.log(
-        `[Realtime] Message subscription ${subscribedTicketId}:`,
-        status,
-        err,
-      );
 
       if (
         status === "CHANNEL_ERROR" ||
@@ -861,11 +856,6 @@ const clearSession = async () => {
     ticketChannel = channel;
 
     channel.subscribe((status, err) => {
-      console.log(
-        `[Realtime] Ticket subscription ${subscribedTicketId}:`,
-        status,
-        err,
-      );
 
       if (
         status === "CHANNEL_ERROR" ||
