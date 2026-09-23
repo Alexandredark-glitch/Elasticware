@@ -128,7 +128,7 @@ function EmbedCodeCard({ orgSlug }: { orgSlug: string }) {
         <div>
           <h2 className="text-lg font-semibold text-cream-100">Embed Code</h2>
           <p className="text-sm text-charcoal-400 mt-1">
-            Paste this into any website to add your chat widget.
+            Paste this into any website to add your chat widget. Specifically, place it just before the closing <code className="text-red-500 font-bold font-2xl">&lt;/body&gt;</code> tag.
           </p>
         </div>
         <button

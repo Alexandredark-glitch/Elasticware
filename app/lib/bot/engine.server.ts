@@ -82,6 +82,6 @@ async function escalate(supabase: Supabase, ticketId: string) {
     ticket_id: ticketId,
     sender: "bot",
     content:
-      "To be honest, I don't know. Let me connect you with an agent. Please wait!",
+      "Let me connect you with an agent to solve your issue. Please wait!",
   });
 }
